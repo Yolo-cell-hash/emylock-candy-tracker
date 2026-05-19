@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'services/firebase_location_service.dart';
+import 'services/geofence_service.dart';
 import 'screens/home_shell.dart';
 
 void main() async {
@@ -19,6 +20,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => FirebaseLocationService()),
+        ChangeNotifierProvider(create: (_) => GeofenceService()),
       ],
       child: MaterialApp(
         title: 'MyLock Candy',

@@ -4,7 +4,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../services/firebase_location_service.dart';
+import '../services/geofence_service.dart';
 import '../theme/app_theme.dart';
+import 'geofence_screen.dart';
 
 class LocationScreen extends StatefulWidget {
   const LocationScreen({super.key});
@@ -76,8 +78,8 @@ class _LocationScreenState extends State<LocationScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FirebaseLocationService>(
-      builder: (context, locationService, child) {
+    return Consumer2<FirebaseLocationService, GeofenceService>(
+      builder: (context, locationService, geoService, child) {
         final pos = LatLng(locationService.latitude, locationService.longitude);
 
         // Trigger side-effects after frame
@@ -107,6 +109,29 @@ class _LocationScreenState extends State<LocationScreen>
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.gnb.mylock_candy',
                       ),
+                      // Geofence circle overlay (if set)
+                      if (geoService.isGeofenceSet &&
+                          geoService.geofenceLat != null &&
+                          geoService.geofenceLong != null)
+                        CircleLayer(
+                          circles: [
+                            CircleMarker(
+                              point: LatLng(geoService.geofenceLat!,
+                                  geoService.geofenceLong!),
+                              radius: geoService.geofenceRadius,
+                              color: (geoService.isInsideGeofence
+                                      ? AppColors.greenOnline
+                                      : AppColors.dangerRed)
+                                  .withValues(alpha: 0.10),
+                              borderColor: (geoService.isInsideGeofence
+                                      ? AppColors.greenOnline
+                                      : AppColors.dangerRed)
+                                  .withValues(alpha: 0.40),
+                              borderStrokeWidth: 2.0,
+                              useRadiusInMeter: true,
+                            ),
+                          ],
+                        ),
                       // Pulsing accuracy ring
                       CircleLayer(
                         circles: [
@@ -125,6 +150,30 @@ class _LocationScreenState extends State<LocationScreen>
                       ),
                       MarkerLayer(
                         markers: [
+                          // Geofence center marker
+                          if (geoService.isGeofenceSet &&
+                              geoService.geofenceLat != null &&
+                              geoService.geofenceLong != null)
+                            Marker(
+                              point: LatLng(geoService.geofenceLat!,
+                                  geoService.geofenceLong!),
+                              width: 36,
+                              height: 36,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryMaroon
+                                      .withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.primaryMaroon,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: const Icon(Icons.shield_outlined,
+                                    color: AppColors.primaryMaroon, size: 16),
+                              ),
+                            ),
+                          // Device marker
                           Marker(
                             point: pos,
                             width: 52,
@@ -202,30 +251,113 @@ class _LocationScreenState extends State<LocationScreen>
                     ),
                   ),
 
-                  // Re-center button
+                  // Geofence status badge (if geofence is set)
+                  if (geoService.isGeofenceSet)
+                    Positioned(
+                      top: 12,
+                      left: 110,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.10),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              geoService.isInsideGeofence
+                                  ? Icons.shield_rounded
+                                  : Icons.warning_rounded,
+                              size: 14,
+                              color: geoService.isInsideGeofence
+                                  ? AppColors.greenOnline
+                                  : AppColors.dangerRed,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              geoService.isInsideGeofence
+                                  ? 'SAFE'
+                                  : 'OUTSIDE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: geoService.isInsideGeofence
+                                    ? AppColors.greenOnline
+                                    : AppColors.dangerRed,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // Re-center button + Set Geofence button
                   Positioned(
                     top: 12,
                     right: 12,
-                    child: Material(
-                      color: Colors.white.withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(12),
-                      elevation: 2,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          if (_mapReady) {
-                            _mapController.move(pos, 16.0);
-                          }
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Icon(
-                            Icons.my_location,
-                            color: AppColors.primaryMaroon,
-                            size: 20,
+                    child: Column(
+                      children: [
+                        Material(
+                          color: Colors.white.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(12),
+                          elevation: 2,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () {
+                              if (_mapReady) {
+                                _mapController.move(pos, 16.0);
+                              }
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(10),
+                              child: Icon(
+                                Icons.my_location,
+                                color: AppColors.primaryMaroon,
+                                size: 20,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Material(
+                          color: Colors.white.withValues(alpha: 0.95),
+                          borderRadius: BorderRadius.circular(12),
+                          elevation: 2,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const GeofenceScreen(),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Icon(
+                                geoService.isGeofenceSet
+                                    ? Icons.shield_rounded
+                                    : Icons.shield_outlined,
+                                color: geoService.isGeofenceSet
+                                    ? AppColors.greenOnline
+                                    : AppColors.primaryMaroon,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -401,9 +533,7 @@ class _LocationScreenState extends State<LocationScreen>
                 child: _buildDataTile(
                   icon: Icons.access_time_filled,
                   label: 'Last Fetch',
-                  value: service.timestampHuman.isNotEmpty
-                      ? _formatTimestamp(service.timestampHuman)
-                      : '—',
+                  value: service.polledAtFormatted,
                   suffix: '',
                 ),
               ),
@@ -463,48 +593,6 @@ class _LocationScreenState extends State<LocationScreen>
         ],
       ),
     );
-  }
-
-  /// Formats "2026-05-15 10:32:04" into a shorter display string
-  String _formatTimestamp(String raw) {
-    try {
-      // Parse the human-readable timestamp
-      final parts = raw.split(' ');
-      if (parts.length >= 2) {
-        final dateParts = parts[0].split('-');
-        final timeParts = parts[1].split(':');
-        if (dateParts.length >= 3 && timeParts.length >= 2) {
-          final month = _monthName(int.tryParse(dateParts[1]) ?? 0);
-          final day = dateParts[2];
-          final hour = timeParts[0];
-          final minute = timeParts[1];
-          return '$day $month, $hour:$minute';
-        }
-      }
-      return raw;
-    } catch (_) {
-      return raw;
-    }
-  }
-
-  String _monthName(int m) {
-    const months = [
-      '',
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    if (m >= 1 && m <= 12) return months[m];
-    return '';
   }
 }
 

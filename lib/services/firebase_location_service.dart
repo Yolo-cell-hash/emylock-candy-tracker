@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:intl/intl.dart';
 
 class FirebaseLocationService extends ChangeNotifier {
   double _latitude = 19.02083;
@@ -9,7 +10,7 @@ class FirebaseLocationService extends ChangeNotifier {
   double _altitude = 0.0;
   double _accuracy = 0.0;
   int _timestamp = 0;
-  String _timestampHuman = '';
+  DateTime? _polledAt;
   DateTime _lastUpdated = DateTime.now();
   bool _hasReceivedUpdate = false;
   StreamSubscription<DatabaseEvent>? _subscription;
@@ -20,14 +21,14 @@ class FirebaseLocationService extends ChangeNotifier {
   double get altitude => _altitude;
   double get accuracy => _accuracy;
   int get timestamp => _timestamp;
-  String get timestampHuman => _timestampHuman;
+  DateTime? get polledAt => _polledAt;
   DateTime get lastUpdated => _lastUpdated;
   bool get hasReceivedUpdate => _hasReceivedUpdate;
 
-  /// Human-readable time since last update
+  /// Human-readable time since last poll (based on polled_at from device)
   String get lastSeenText {
-    if (!_hasReceivedUpdate) return 'Waiting for data…';
-    final diff = DateTime.now().difference(_lastUpdated);
+    if (!_hasReceivedUpdate || _polledAt == null) return 'Waiting for data…';
+    final diff = DateTime.now().difference(_polledAt!);
     if (diff.inSeconds < 10) return 'Just now';
     if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
     if (diff.inMinutes < 60) {
@@ -37,6 +38,17 @@ class FirebaseLocationService extends ChangeNotifier {
       return '${diff.inHours} hour${diff.inHours > 1 ? 's' : ''} ago';
     }
     return '${diff.inDays} day${diff.inDays > 1 ? 's' : ''} ago';
+  }
+
+  /// Formatted polled_at for display, e.g. "19 May, 09:22"
+  String get polledAtFormatted {
+    if (_polledAt == null) return '—';
+    try {
+      final local = _polledAt!.toLocal();
+      return DateFormat('dd MMM, HH:mm').format(local);
+    } catch (_) {
+      return '—';
+    }
   }
 
   FirebaseLocationService() {
@@ -65,8 +77,17 @@ class FirebaseLocationService extends ChangeNotifier {
             final newAlt = _parseDouble(data['altitude']) ?? _altitude;
             final newAcc = _parseDouble(data['accuracy']) ?? _accuracy;
             final newTs = _parseInt(data['timestamp']) ?? _timestamp;
-            final newTsHuman =
-                (data['timestamp_human'] as String?) ?? _timestampHuman;
+
+            // Parse polled_at ISO 8601 string: "2026-05-19T03:52:12.478310+00:00"
+            DateTime? newPolledAt = _polledAt;
+            final polledAtRaw = data['polled_at'];
+            if (polledAtRaw is String && polledAtRaw.isNotEmpty) {
+              try {
+                newPolledAt = DateTime.parse(polledAtRaw);
+              } catch (e) {
+                debugPrint('Failed to parse polled_at: $e');
+              }
+            }
 
             final hasChanged = newLat != _latitude ||
                 newLng != _longitude ||
@@ -78,7 +99,7 @@ class FirebaseLocationService extends ChangeNotifier {
             _altitude = newAlt;
             _accuracy = newAcc;
             _timestamp = newTs;
-            _timestampHuman = newTsHuman;
+            _polledAt = newPolledAt;
 
             if (hasChanged || !_hasReceivedUpdate) {
               _lastUpdated = DateTime.now();
