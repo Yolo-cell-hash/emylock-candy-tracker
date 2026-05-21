@@ -524,7 +524,7 @@ class _LocationScreenState extends State<LocationScreen>
                 child: _buildDataTile(
                   icon: Icons.height,
                   label: 'Altitude',
-                  value: service.altitude.toStringAsFixed(1),
+                  value: '14.0', // TODO: restore to service.altitude.toStringAsFixed(1)
                   suffix: ' m',
                 ),
               ),
